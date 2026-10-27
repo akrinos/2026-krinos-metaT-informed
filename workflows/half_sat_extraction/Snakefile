@@ -1,0 +1,96 @@
+import os
+import pandas as pd
+
+taxonomy_abundances="../2026-07_new_tax_clustering/taxonomy_linking_prefilter_TPM_0/merged_salmon_abund_transcript_names_tax.tsv"
+taxonomy_name_links="../2026-07_new_tax_clustering/taxonomy_linking_prefilter_TPM_0/merged_salmon_abund_transcript_names__.tsv"
+nutrient_data_1="/users/akrinos/data/arianna/2025-provincetown-metaT/environmental_data/CC_wet_chemistry_2000_2021.csv"
+nutrient_data_2="/users/akrinos/data/arianna/2025-provincetown-metaT/environmental_data/CC_wet_chemistry_2022_2023.csv"
+temperature_data="/users/akrinos/data/arianna/2025-provincetown-metaT/environmental_data/temperatures.csv"
+OUTPUTDIR="output_estimation_logN_linP_20261009"
+MAD_tax_file="/oscar/scratch/akrinos/MAD-estimated-taxonomy.out"
+
+rule all:
+    input:
+        nitrogen_half_sats=os.path.join(OUTPUTDIR,"half_sats",
+            "nitrogen_half_sats.csv"),
+        phosphorus_half_sats=os.path.join(OUTPUTDIR,"half_sats",
+            "phosphorus_half_sats.csv"),
+        temperature_mean_std=os.path.join(OUTPUTDIR,"temp_relation",
+            "temperature_mean_std.csv")
+
+rule phosphorus_correlations:
+    output:
+        phosphorus_half_sats=os.path.join(OUTPUTDIR,"half_sats",
+            "phosphorus_half_sats.csv"),
+        order_list=os.path.join(OUTPUTDIR,"orders_of_interest",
+            "order_list.txt")
+    params:
+        taxonomy_abundances=taxonomy_abundances,
+        taxonomy_name_links=taxonomy_name_links,
+        nutrient_data_1=nutrient_data_1,
+        nutrient_data_2=nutrient_data_2
+    conda:
+        "/users/akrinos/miniconda3/envs/r_env"
+    resources:
+        mem_mb="50gb",
+        runtime=1000
+    shell:
+        """
+        Rscript scripts/phosphorus_half_sats.R {params.taxonomy_abundances} {params.taxonomy_name_links} {output.phosphorus_half_sats} {params.nutrient_data_1} {params.nutrient_data_2} {output.order_list}
+        """
+        
+rule nitrogen_correlations:
+    output:
+        nitrogen_half_sats=os.path.join(OUTPUTDIR,"half_sats",
+            "nitrogen_half_sats.csv")
+    params:
+        taxonomy_abundances=taxonomy_abundances,
+        taxonomy_name_links=taxonomy_name_links,
+        nutrient_data_1=nutrient_data_1,
+        nutrient_data_2=nutrient_data_2
+    resources:
+        mem_mb="50gb",
+        runtime=1000
+    conda:
+        "/users/akrinos/miniconda3/envs/r_env"
+    shell:
+        """
+        Rscript scripts/nitrogen_half_sats.R {params.taxonomy_abundances} {params.taxonomy_name_links} {output.nitrogen_half_sats} {params.nutrient_data_1} {params.nutrient_data_2}
+        """
+        
+rule extract_order_abund:
+    input:
+        MAD_tax_file=MAD_tax_file,
+        order_list=os.path.join(OUTPUTDIR,"orders_of_interest",
+            "order_list.txt")
+    output:
+        abund_by_order_sample = os.path.join(OUTPUTDIR, "abund_file",
+            "abund_by_order_sample.csv")
+    conda:
+        "/users/akrinos/miniconda3/envs/r_env"
+    resources:
+        mem_mb="75gb",
+        runtime=1000
+    shell:
+        """
+        Rscript scripts/pull_order_abundances.R {output.abund_by_order_sample} {input.MAD_tax_file} {input.order_list}
+        """
+         
+rule temperature_relation:
+    input:
+        abund_by_order_sample = os.path.join(OUTPUTDIR, "abund_file",
+            "abund_by_order_sample.csv"),
+         temperature_data = temperature_data
+    output:
+        temperature_mean_std=os.path.join(OUTPUTDIR,"temp_relation",
+            "temperature_mean_std.csv")
+    conda:
+        "/users/akrinos/miniconda3/envs/r_env"
+    resources:
+        mem_mb="30gb",
+        runtime=1000
+    shell:
+        """
+        Rscript scripts/temperature_mu_std.R {input.abund_by_order_sample} {output.temperature_mean_std} {input.temperature_data}
+        """
+        
